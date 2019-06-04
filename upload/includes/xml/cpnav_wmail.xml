@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<navgroups product="hc_vbwebmail" master="true">
+	<navgroup phrase="wmail_cpnav_title" displayorder="105" hr="true">
+
+		<navoption displayorder="10">
+			<phrase>wmail_cpnav_global</phrase>
+			<link>wmail_admin_global.php</link>
+		</navoption>
+
+		<navoption displayorder="20">
+			<phrase>wmail_cpnav_options</phrase>
+			<link>options.php?do=options&amp;dogroup=wmail_vboptions</link>
+		</navoption>
+		
+		<navoption displayorder="20">
+			<phrase>wmail_cpnav_repair</phrase>
+			<link>wmail_admin_repair.php</link>
+		</navoption>
+
+	</navgroup>
+</navgroups>

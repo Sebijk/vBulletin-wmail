@@ -1,0 +1,1179 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<product productid="hc_vbwebmail" active="1">
+	<title>vB Web-Mail</title>
+	<description>Adds a webmail client to vB to access POP3 based mailboxes</description>
+	<version>1.00</version>
+	<codes>
+		<code version="0.85">
+			<installcode><![CDATA[echo "<div class=\"smallfont\"><strong>Setting up tables....</strong></div><br /><br />";
+
+$vbulletin->db->reporterror = false;
+
+$vbulletin->db->query_write( "CREATE TABLE " . TABLE_PREFIX . "wmail_settings ( userid int(11) NOT NULL default '0', data text NOT NULL, PRIMARY KEY  (userid) );" );
+echo "<div class=\"smallfont\">Table '" . TABLE_PREFIX . "wmail_settings' created....</div><br />";
+
+$vbulletin->db->query_write( "CREATE TABLE " . TABLE_PREFIX . "wmail_adrbook (entryid INT NOT NULL AUTO_INCREMENT, userid INT NOT NULL, name CHAR( 128 ) NOT NULL, email CHAR( 128 ) NOT NULL, PRIMARY KEY ( entryid ) );" );
+echo "<div class=\"smallfont\">Table '" . TABLE_PREFIX . "wmail_adrbook' created....</div><br />";
+
+$vbulletin->db->query_write( "CREATE TABLE " . TABLE_PREFIX . "wmail_readmarks (userid int(11) NOT NULL default '0', msgid char(128) NOT NULL default '');" );
+echo "<div class=\"smallfont\">Table '" . TABLE_PREFIX . "wmail_readmarks' created....</div><br />";
+
+$vbulletin->db->query_write( "ALTER TABLE " . TABLE_PREFIX . "usergroup ADD wmailpermissions INT( 10 ) UNSIGNED NOT NULL;" );
+echo "<div class=\"smallfont\">Table '" . TABLE_PREFIX . "usergroup' altered (column 'wmailpermissions' added)....</div><br />";
+
+$vbulletin->db->reporterror = true;
+
+echo "<br /><div class=\"smallfont\"><strong>Table setup complete....</strong></div><br /><br />";]]></installcode>
+			<uninstallcode><![CDATA[$vbulletin->db->reporterror = false;
+
+$vbulletin->db->query_write( "DROP TABLE " . TABLE_PREFIX . "wmail_settings;" );
+
+$vbulletin->db->query_write( "DROP TABLE " . TABLE_PREFIX . "wmail_adrbook;" );
+
+$vbulletin->db->query_write( "DROP TABLE " . TABLE_PREFIX . "wmail_readmarks;" );
+
+$vbulletin->db->query_write( "ALTER TABLE " . TABLE_PREFIX . "usergroup DROP wmailpermissions;" );
+
+$vbulletin->db->reporterror = true;]]></uninstallcode>
+		</code>
+		<code version="0.90">
+			<installcode><![CDATA[require_once(DIR . '/includes/class_bitfield_builder.php');
+vB_Bitfield_Builder::save($db);
+build_forum_permissions();]]></installcode>
+			<uninstallcode />
+		</code>
+	</codes>
+	<templates>
+		<template name="webmail_addattachmentbit" templatetype="template" date="1147139999" username="Hellcat" version="3.5.4"><![CDATA[<tr>
+  <td class="alt1" align="left">
+    <img class="inlineimg" src="$stylevar[imgdir_attach]/attach.gif" alt="$vbphrase[wmail_attimg]" width="16" height="16" border="0" style="vertical-align:baseline" />
+  </td>
+  <td class="alt1" align="left" nowrap="nowrap">
+    $attname
+  </td>
+  <td class="alt1" align="left">
+    <div class="smallfont">($attsize)</div>
+  </td>
+  <td class="alt1" width="100%" align="left">
+    <input type="submit" name="delatt[$attid]" value="$vbphrase[wmail_delete]" class="button">
+  </td>
+</tr>]]></template>
+		<template name="webmail_addattachments" templatetype="template" date="1147140052" username="Hellcat" version="3.5.4"><![CDATA[<!-- WMail Attachments -->
+
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="100%" align="center">
+  <tr>
+    <td class="thead" colspan="4" align="left">
+      $vbphrase[wmail_attachments]
+    </td>
+  </tr>
+$attachbits
+  <tr>
+    <td colspan="4" align="left" class="alt1">
+      $vbphrase[wmail_addnewatt]:
+      <br />
+      <input type="hidden" name="attlist" value="$attlist">
+      <input name="newatt" id="newatt" type="file" size="50" class="button" /><input type="submit" name="uploadatt" value="$vbphrase[wmail_upload]" class="button" />
+    </td>
+  </tr>
+</table>
+
+<!-- /WMail Attachments -->]]></template>
+		<template name="webmail_addressbook_entry" templatetype="template" date="1147239159" username="Hellcat" version="3.5.4"><![CDATA[<option value="$email" title="$name">$name</option>]]></template>
+		<template name="webmail_addressbook_main" templatetype="template" date="1147414956" username="Hellcat" version="3.5.4"><![CDATA[$wmailerrormsg
+
+<!-- WMail Addressbook-->
+
+<script language="JavaScript" type="text/JavaScript">
+<!--
+
+function GetSelectedName()
+{
+  o=document.getElementById('book');
+  n=o.options[o.selectedIndex].title;
+  return n;
+}
+function GetSelectedEmail()
+{
+  o=document.getElementById('book');
+  e=o.options[o.selectedIndex].value;
+  return e;
+}
+
+function SetValue(field, v)
+{
+  o=document.getElementById(field);
+  o.value=v;
+}
+
+//-->
+</script>
+
+<form name="addressbookform" method="post" action="wmail.php">
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="98%" align="center">
+  <tr>
+    <td class="tcat">$vbphrase[wmail_addressbook]</td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel">
+<div class="thead" align="left">$vbphrase[wmail_adrbook_welcome]</div>
+  <input name="do" type="hidden" id="do" value="adrbook">
+  <table border="0" cellspacing="0" cellpadding="3" align="center">
+    <tr> 
+      <td align="left" valign="top"><fieldset class="fieldset"><legend>$vbphrase[wmail_adrbook_contactlist]</legend>
+  <select name="book" size="10" id="book" onChange="SetValue('name', GetSelectedName()); SetValue('email', GetSelectedEmail());">
+$entries
+<option value="" title="">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</option>
+  </select>
+      </fieldset</td>
+    </tr>
+  </table>
+
+<table border="0" cellspacing="0" cellpadding="3" align="center">
+  <tr>
+    <td>
+      <fieldset class="fieldset"><legend>$vbphrase[wmail_adrbook_details]</legend>
+
+  <table border="0" cellspacing="0" cellpadding="3" align="center">
+    <tr> 
+      <td align="right">$vbphrase[wmail_adrbook_name]:</td>
+      <td align="left"><input name="name" type="text" id="name" size="32"><input name="btndelete" type="submit" id="btndelete" value="$vbphrase[wmail_delete]" class="button"></td>
+    </tr>
+    <tr> 
+      <td align="right">$vbphrase[wmail_adrbook_email]:</td>
+      <td align="left"><input name="email" type="text" id="email" size="32"></td>
+    </tr>
+  </table>
+</fieldset>
+
+    </td>
+  </tr>
+</table>
+  <input name="btnsave" type="submit" id="btnsave" value="$vbphrase[wmail_adrbook_save]" class="button">
+
+      </div>
+    </td>
+  </tr>
+</table>
+</form>
+<!-- /WMail Addressbook-->]]></template>
+		<template name="webmail_attachmentbit" templatetype="template" date="1147140065" username="Hellcat" version="3.5.4"><![CDATA[<tr>
+  <td class="alt1" align="left">
+    <img class="inlineimg" src="$stylevar[imgdir_attach]/attach.gif" alt="$vbphrase[wmail_attimg]" width="16" height="16" border="0" style="vertical-align:baseline" />
+  </td>
+  <td class="alt1" align="left" nowrap="nowrap">
+    <a href="wmail.php?do=getatt&amp;id=$mmsgid&amp;n=$n&amp;part=$mpart">$attname</a>
+  </td>
+  <td class="alt1" width="100%" align="left">
+    <div class="smallfont">($attsize)</div>
+  </td>
+</tr>]]></template>
+		<template name="webmail_attachments" templatetype="template" date="1147221984" username="Hellcat" version="3.5.4"><![CDATA[<!-- WMail Attachments -->
+
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="100%" align="center">
+  <tr>
+    <td class="thead" colspan="3" align="left">
+      $vbphrase[wmail_attachments]
+    </td>
+  </tr>
+$attachbits
+</table>
+
+<!-- /WMail Attachments -->]]></template>
+		<template name="webmail_error" templatetype="template" date="1146735145" username="Hellcat" version="3.5.4"><![CDATA[<if condition="$wmailerror">
+<!-- WMail Mailview Error -->
+  <table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="88%" align="center">
+    <tr>
+      <td class="tcat">$vbphrase[wmail_error]</td>
+    </tr>
+    <tr>
+      <td class="panelsurround" align="center">
+        <div class="panel">
+          <strong>$wmailerror</strong>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <br />
+<!-- /WMail Mailview Error -->
+</if>]]></template>
+		<template name="webmail_erroronly" templatetype="template" date="1146735170" username="Hellcat" version="3.5.4"><![CDATA[$wmailerrormsg]]></template>
+		<template name="webmail_homepage" templatetype="template" date="1147415105" username="Hellcat" version="3.5.4"><![CDATA[$wmailerrormsg
+
+<!-- WMail Homepage -->
+
+<script language="JavaScript" type="text/JavaScript">
+<!--
+
+function GetSelectedEmail()
+{
+  o=document.getElementById('book');
+  e=o.options[o.selectedIndex].value;
+  return e;
+}
+
+function SetValue(field, v)
+{
+  o=document.getElementById(field);
+  o.value=v;
+}
+
+//-->
+</script>
+
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="98%" align="center">
+  <tr>
+    <td class="tcat">$vbphrase[wmail_navbit_webmail]</td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel">
+        <phrase 1="$username" 2="$inboxtotal" 3="$inboxnew">$vbphrase[wmail_homepage_welcome]</phrase><br />
+
+<table cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="100" align="center">
+  <tr>
+    <td align="center" valign="top" nowrap="nowrap">
+
+<form name="addressbookform" method="post" action="wmail.php">
+  <input name="do" type="hidden" id="do" value="newmail">
+  <input type="hidden" name="to" id="to" value="">
+  <select name="book" size="10" id="book" onChange="SetValue('to', GetSelectedEmail());">
+$entries
+<option value="" title="">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</option>
+  </select>
+  <br />
+  <input name="go" type="submit" id="go" value="$vbphrase[wmail_adrbook_quicknew]" class="button">
+</form>
+
+    </td>
+    <td align="left" valign="top" nowrap="nowrap">
+      <fieldset class="fieldset"><legend>$vbphrase[wmail_recentthings]</legend>
+        <div class="smallfont">
+
+          $recentthings
+
+        </div>
+      </fieldset>
+    </td>
+  </tr>
+</table>
+<br /><em>$vbphrase[wmail_wmailversion] $wmailversion</em><br />
+      </div>
+    </td>
+  </tr>
+</table>
+<!-- /WMail Homepage -->]]></template>
+		<template name="webmail_homepage_mailbit" templatetype="template" date="1147155801" username="Hellcat" version="3.5.4"><![CDATA[&nbsp;<a href="wmail.php?do=read&amp;n=$i">$msubj</a>&nbsp;<br />]]></template>
+		<template name="webmail_homepage_recent" templatetype="template" date="1147398303" username="Hellcat" version="3.5.4"><![CDATA[<div class="smallfont"><strong><em>$vbphrase[wmail_lastestmail]:</em></strong><br />
+$recentmails
+</div>
+<hr />
+<div class="smallfont"><em>$vbphrase[wmail_clickforinbox]</em></div>]]></template>
+		<template name="webmail_mailbox" templatetype="template" date="1147574458" username="Hellcat" version="3.5.4"><![CDATA[$wmailerrormsg
+
+<!-- WMail Mailbox -->
+
+<script type="text/javascript"><!--
+function SelectAll(form)
+{
+  for (var x = 0; x< form.elements.length; x++) {
+    var y=form.elements[x];
+    if (y.name != 'ALLMSGS') {
+      y.checked = form.ALLMSGS.checked;
+    }
+  }
+}
+//--></script>
+
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="98%" align="center">
+  <tr>
+    <td class="tcat">$vbphrase[wmail_mailbox]</td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel">
+<!-- WMail Maillist -->
+<if condition="$pageNavigation"><div align="right" style="margin-bottom: 5px">$pageNavigation</div></if>
+
+<form action="wmail.php" method="post" name="maillist" id="maillist">
+<input name="do" type="hidden" id="do" value="procmail">
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="100%" align="center">
+<tr>
+  <td class="thead" align="left" nowrap="nowrap">
+    <div class="smallfont">&nbsp;</div>
+  </td>
+  <td class="thead" align="left" nowrap="nowrap">
+    <div class="smallfont">&nbsp;</div>
+  </td>
+  <td class="thead" align="left" nowrap="nowrap">
+    <div class="smallfont"><strong>$vbphrase[wmail_from]</strong></div>
+  </td>
+  <td class="thead" align="left" nowrap="nowrap" width="100%">
+    <div class="smallfont"><strong>$vbphrase[wmail_subject]</strong></div>  </td>
+  <td class="thead" align="left" nowrap="nowrap">
+    <div class="smallfont"><strong>$vbphrase[wmail_date]</strong></div>
+  </td>
+  <td class="thead" align="left" nowrap="nowrap">
+    <div class="smallfont"><strong>$vbphrase[wmail_size]</strong></div>
+  </td>
+</tr>
+$listbits
+<tr>
+  <td align="left" colspan="6" class="thead">
+    <input name="ALLMSGS" type="checkbox" id="ALLMSGS" value="checkbox" onClick="SelectAll(this.form);"><label for="ALLMSGS">$vbphrase[wmail_selectall]</label>
+  </td>
+</tr>
+<tr>
+  <td align="left" colspan="6" class="alt1">
+<input name="btndelete" type="submit" id="btndelete" value="$vbphrase[wmail_deleteselected]" class="button" /><br />
+<input name="btnmarkread" type="submit" id="btnmarkread" value="$vbphrase[wmail_markselectedread]" class="button" />
+<input name="btnmarkallread" type="submit" id="btnmarkallread" value="$vbphrase[wmail_markallread]" class="button" />
+<input name="btnmarkunread" type="submit" id="btnmarkunread" value="$vbphrase[wmail_markunread]" class="button" />
+  </td>
+</tr>
+</table>
+</form>
+
+<if condition="$pageNavigation"><div align="right" style="margin-top: 5px">$pageNavigation</div></if>
+<!-- /WMail Maillist -->
+      </div>
+    </td>
+  </tr>
+</table>
+<!-- /WMail Mailbox -->]]></template>
+		<template name="webmail_mailboxitem" templatetype="template" date="1147314741" username="Hellcat" version="3.5.4"><![CDATA[<tr>
+  <td class="$rowcolor" align="left" nowrap="nowrap">
+    <input type="checkbox" name="delete[$i]" value="$mmsgid">
+  </td>
+  <td class="$rowcolor" align="left" nowrap="nowrap">
+    <if condition="$mismultipart">
+      <img class="inlineimg" src="$stylevar[imgdir_attach]/attach.gif" alt="$vbphrase[wmail_attimg]" width="16" height="16" border="0" style="vertical-align:baseline" />
+    <else />
+      &nbsp;
+    </if>
+  </td>
+  <td class="$rowcolor" align="left" nowrap="nowrap">
+    <if condition="$readmark">
+      <strong><a href="wmail.php?do=read&amp;id=$mmsgid&amp;n=$i">$mfrom</a></strong>
+    <else />
+      <a href="wmail.php?do=read&amp;id=$mmsgid&amp;n=$i">$mfrom</a>
+    </if>
+  </td>
+  <td class="$rowcolor" align="left" nowrap="nowrap" width="100%">
+    <if condition="$readmark">
+      <strong><a href="wmail.php?do=read&amp;id=$mmsgid&amp;n=$i">$msubj</a></strong>
+    <else />
+      <a href="wmail.php?do=read&amp;id=$mmsgid&amp;n=$i">$msubj</a>
+    </if>
+  </td>
+  <td class="$rowcolor" align="left" nowrap="nowrap">
+    <div class="smallfont">$mdate</div>
+  </td>
+  <td class="$rowcolor" align="left" nowrap="nowrap">
+    <div class="smallfont">$msize</div>
+  </td>
+</tr>]]></template>
+		<template name="webmail_mailsent" templatetype="template" date="1146736353" username="Hellcat" version="3.5.4"><![CDATA[$wmailerrormsg
+
+<!-- WMail Mailsentnote -->
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="98%" align="center">
+  <tr>
+    <td class="tcat">$vbphrase[wmail_composemail]</td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel"><div class="alt1">
+<br /><phrase 1="$sentto">$vbphrase[wmail_mailsent]</phrase><br /><br />
+      </div></div>
+    </td>
+  </tr>
+</table>
+<!-- /WMail Mailsentnote -->]]></template>
+		<template name="webmail_mailview" templatetype="template" date="1147402809" username="Hellcat" version="3.5.4"><![CDATA[$wmailerrormsg
+
+<!-- WMail Mailview -->
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="98%" align="center">
+  <tr>
+    <td class="tcat">$vbphrase[wmail_readmail]</td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel"><div class="alt2">
+
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="0" border="0" width="100%" align="center">
+<tr>
+  <td align="left" nowrap="nowrap" width="100%" class="alt2">
+    <strong>$vbphrase[wmail_from]:</strong> $mfrom
+  </td>
+  <td align="left" nowrap="nowrap" class="alt2">
+    <strong>$vbphrase[wmail_date]:</strong> $mdate
+  </td>
+</tr>
+<tr>
+  <td align="left" nowrap="nowrap" class="alt2">
+    <strong>$vbphrase[wmail_to]:</strong> $mto
+  </td>
+  <td align="left" nowrap="nowrap" class="alt2">
+    <strong>$vbphrase[wmail_size]:</strong> $msize
+  </td>
+</tr>
+<tr>
+  <td colspan="2" align="left" class="alt2">
+    &nbsp;
+  </td>
+</tr>
+<tr>
+  <td colspan="2" align="left" class="alt2">
+    <strong>$vbphrase[wmail_subject]:</strong> $msubj
+  </td>
+</tr>
+</table>
+
+      </div></div>
+    </td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="left">
+
+<!-- WMail Mailview Toolbar -->
+<table cellpadding="0" cellspacing="0" border="0" align="left">
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;</td>
+    <td class="panelsurround" align="center">
+      <div class="smallfont"><strong>
+        <a href="wmail.php?do=newmail&amp;to=$mfromaddr&amp;quote=$n">$vbphrase[wmail_reply]</a>
+      </strong></div>
+    </td>
+    <td>|</td>
+    <td class="panelsurround" align="center">
+      <div class="smallfont"><strong>
+        <a href="wmail.php?do=newmail&amp;quote=$n">$vbphrase[wmail_forward]</a>
+      </strong></div>
+    </td>
+    <td>&nbsp;&nbsp;&nbsp;</td>
+    <td class="panelsurround" align="center">
+      <div class="smallfont"><strong>
+        <a href="wmail.php?do=deletemail&amp;n=$n">$vbphrase[wmail_delete]</a>
+      </strong></div>
+    </td>
+  </tr>
+</table>
+<!-- /WMail Mailview Toolbar -->
+
+    </td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="left">
+      <div class="panel">
+        $mbody
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="left">
+
+<!-- WMail Mailview Toolbar -->
+<table cellpadding="0" cellspacing="0" border="0" align="left">
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;</td>
+    <td class="panelsurround" align="center">
+      <div class="smallfont"><strong>
+        <a href="wmail.php?do=newmail&amp;to=$mfromaddr&amp;quote=$n">$vbphrase[wmail_reply]</a>
+      </strong></div>
+    </td>
+    <td>|</td>
+    <td class="panelsurround" align="center">
+      <div class="smallfont"><strong>
+        <a href="wmail.php?do=newmail&amp;quote=$n">$vbphrase[wmail_forward]</a>
+      </strong></div>
+    </td>
+    <td>&nbsp;&nbsp;&nbsp;</td>
+    <td class="panelsurround" align="center">
+      <div class="smallfont"><strong>
+        <a href="wmail.php?do=deletemail&amp;n=$n">$vbphrase[wmail_delete]</a>
+      </strong></div>
+    </td>
+  </tr>
+</table>
+<!-- /WMail Mailview Toolbar -->
+
+    </td>
+  </tr>
+<if condition="$showattachments">
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel"><div class="alt1">
+$attachments
+      </div></div>
+    </td>
+  </tr>
+</if>
+</table>
+
+<!-- /WMail Mailview -->]]></template>
+		<template name="webmail_newmail" templatetype="template" date="1147414924" username="Hellcat" version="3.5.4"><![CDATA[$wmailerrormsg
+
+<!-- WMail New Mail -->
+
+<script language="JavaScript" type="text/JavaScript">
+<!--
+
+function GetSelectedEmail()
+{
+  o=document.getElementById('book');
+  e=o.options[o.selectedIndex].value;
+  return e;
+}
+
+function AppendValue(field, v)
+{
+  o=document.getElementById(field);
+  t=o.value;
+  o.value=t + v;
+}
+
+//-->
+</script>
+
+<form name="wmailnewmail" method="post" action="wmail.php" enctype="multipart/form-data" onsubmit="return vB_Editor['$editorid'].prepare_submit(this.title.value, 0)">
+<input type="hidden" name="do" value="newmail" />
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="98%" align="center">
+  <tr>
+    <td class="tcat">$vbphrase[wmail_composemail]</td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel"><div class="alt1">
+
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="0" border="0" width="100%" align="center">
+ <tr>
+    <td align="left" valign="top" nowrap="nowrap" class="alt2" width="100%">
+
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="0" border="0" width="100%" align="center">
+<tr>
+  <td align="left" nowrap="nowrap" class="alt2">
+    <strong>$vbphrase[wmail_to]:</strong>
+  </td>
+  <td align="left" nowrap="nowrap" class="alt2" width="100%">
+    <input name="to" id="to" type="text" size="50" value="$mto" />
+  </td>
+</tr>
+<tr>
+  <td align="left" nowrap="nowrap" class="alt2">
+    <strong>$vbphrase[wmail_cc]:</strong>
+  </td>
+  <td align="left" nowrap="nowrap" class="alt2">
+    <input name="cc" id="cc" type="text" size="50" value="$mcc" />
+  </td>
+</tr>
+<tr>
+  <td align="left" nowrap="nowrap" class="alt2">
+    <strong>$vbphrase[wmail_bcc]:</strong>
+  </td>
+  <td align="left" nowrap="nowrap" class="alt2">
+    <input name="bcc" id="bcc" type="text" size="50" value="$mbcc" />
+  </td>
+</tr>
+</table>
+
+    </td>
+    <td align="left" valign="top" nowrap="nowrap" class="alt2">
+
+  <select name="book" size="5" id="book">
+$entries
+<option value="" title="">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</option>
+  </select>
+  <br />$vbphrase[wmail_adrbook_copyto]:<br />
+  <input name="asto" type="button" id="asto" value="$vbphrase[wmail_to]" onClick="AppendValue('to', GetSelectedEmail() + ', ');">
+  <input name="ascc" type="button" id="ascc" value="$vbphrase[wmail_cc]" onClick="AppendValue('cc', GetSelectedEmail() + ', ');">
+  <input name="asbcc" type="button" id="asbcc" value="$vbphrase[wmail_bcc]" onClick="AppendValue('bcc', GetSelectedEmail() + ', ');">
+
+    </td>
+  </tr>
+</table>
+
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="0" border="0" width="100%" align="center">
+<tr>
+  <td align="left" class="alt2">
+    <strong>$vbphrase[wmail_subject]:</strong> <input name="subj" type="text" size="70" value="$msubj" />
+  </td>
+</tr>
+</table>
+
+      </div></div>
+    </td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="left">
+      <div class="panel">
+
+<!-- WMail New Mail Toolbar -->
+<table cellpadding="0" cellspacing="0" border="0" align="left">
+  <tr>
+    <td class="panelsurround" align="center">
+        <input type="submit" name="sendmail" value="$vbphrase[wmail_send]" class="button" />
+    </td>
+    <td>&nbsp;</td>
+  </tr>
+</table>
+<br />
+<!-- /WMail New Mail Toolbar -->
+<br />
+$messagearea
+<br />
+<!-- WMail New Mail Toolbar -->
+<table cellpadding="0" cellspacing="0" border="0" align="left">
+  <tr>
+    <td class="panelsurround" align="center">
+        <input type="submit" name="sendmail" value="$vbphrase[wmail_send]" class="button" />
+    </td>
+    <td>&nbsp;</td>
+  </tr>
+</table>
+<br />
+<!-- /WMail New Mail Toolbar -->
+
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel"><div class="alt1">
+$attachments
+      </div></div>
+    </td>
+  </tr>
+</table>
+</form>
+<!-- /WMail New Mail -->]]></template>
+		<template name="webmail_quoteheader" templatetype="template" date="1147618846" username="Hellcat" version="3.5.4"><![CDATA[----- $vbphrase[wmail_quotingmsg] -----
+$vbphrase[wmail_from]: $originalsender
+$vbphrase[wmail_date]: $originaldate
+
+$vbphrase[wmail_subject]: $originalsubject
+
+$this_is_a_nonexistant_var_to_trick_vbs_template_trimming_for_adding_blank_lines_at_the_end_at_its_seriously_getting_too_long]]></template>
+		<template name="webmail_redirectheader" templatetype="template" date="1147753045" username="Hellcat" version="3.5.4"><![CDATA[<if condition="is_browser('mozilla')">
+	<script type="text/javascript">
+	<!--
+	function exec_refresh()
+	{
+		window.status = "$vbphrase[redirecting]" + myvar;
+		myvar = myvar + " .";
+		var timerID = setTimeout("exec_refresh();", 100);
+		if (timeout > 0)
+		{
+			timeout -= 1;
+		}
+		else
+		{
+			clearTimeout(timerID);
+			window.status = "";
+			window.location = "$js_url";
+		}
+	}
+	
+	var myvar = "";
+	var timeout = 20;
+	exec_refresh();
+	//-->
+	</script>
+<else />
+	<meta http-equiv="Refresh" content="2; URL=$url" />
+</if>]]></template>
+		<template name="webmail_settings" templatetype="template" date="1149552711" username="Hellcat" version="3.5.4"><![CDATA[<!-- WMail Settings -->
+<form action="wmail.php" method="post" name="wmailsettings" id="wmailsettings">
+<input name="do" type="hidden" id="do" value="settings">
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="98%" align="center">
+  <tr>
+    <td class="tcat">$vbphrase[wmail_wmailsettings]</td>
+  </tr>
+  <tr>
+    <td class="thead">$vbphrase[wmail_serveroptions]</td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel">
+
+<!-- WMail Server Settings -->
+
+<table cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="100" align="center">
+  <tr>
+    <td align="left" valign="top" nowrap="nowrap">
+      <fieldset class="fieldset"><legend>$vbphrase[wmail_settings_pop3]</legend>
+      $vbphrase[wmail_host] / $vbphrase[wmail_port]:<br />
+      <input name="cfg[inboundhost]" type="text" size="25" value="$wmailcfg[inboundhost]" />:<input name="cfg[pop3port]" type="text" size="4" value="$wmailcfg[pop3port]" /><br />
+      <br />
+      $vbphrase[wmail_username]:<br />
+      <input name="cfg[inbounduser]" type="text" size="35" value="$wmailcfg[inbounduser]" /><br />
+      $vbphrase[wmail_password]:<br />
+      <input name="cfg[inboundpwd]" type="password" size="35" value="$wmailcfg[inboundpwd]" /><br /><br />
+      $vbphrase[wmail_timeout]:<br />
+      <input name="cfg[timeout]" type="text" size="4" value="$wmailcfg[timeout]" />
+      </fieldset>
+    </td>
+    <td align="left" valign="top" nowrap="nowrap">
+      <fieldset class="fieldset"><legend>$vbphrase[wmail_settings_smtp]</legend>
+      $vbphrase[wmail_host] / vbphrase[wmail_port]:<br />
+      <input name="cfg[outboundhost]" type="text" size="25" value="$wmailcfg[outboundhost]" />:<input name="cfg[smtpport]" type="text" size="4" value="$wmailcfg[smtpport]" /><br />
+      <br />
+      $vbphrase[wmail_username]:<br />
+      <input name="cfg[outbounduser]" type="text" size="35" value="$wmailcfg[outbounduser]" /><br />
+      $vbphrase[wmail_password]:<br />
+      <input name="cfg[outboundpwd]" type="password" size="35" value="$wmailcfg[outboundpwd]" /><br /><br />
+      $vbphrase[wmail_authtype]:<br />
+      <select name="cfg[outboundauth]">
+   <if condition="$wmailcfg[outboundauth]=='LOGIN'">
+    <option value="LOGIN" selected>$vbphrase[wmail_smtpauth_login]</option>
+   <else />
+    <option value="LOGIN">$vbphrase[wmail_smtpauth_login]</option>
+   </if>
+   <if condition="$wmailcfg[outboundauth]=='PLAIN'">
+    <option value="PLAIN" selected>$vbphrase[wmail_smtpauth_plain]</option>
+   <else />
+    <option value="PLAIN">$vbphrase[wmail_smtpauth_plain]</option>
+   </if>
+   <if condition="$wmailcfg[outboundauth]==''">
+    <option value="NONE" selected>$vbphrase[wmail_smtpauth_none]</option>
+   <else />
+    <option value="NONE">$vbphrase[wmail_smtpauth_none]</option>
+   </if>
+      </select>
+      </fieldset>
+    </td>
+  </tr>
+  <tr>
+    <td align="left" valign="top" nowrap="nowrap" colspan="2">
+      <fieldset class="fieldset"><legend></legend>
+        <input type="checkbox" name="cfg[loginascookie]" id="cfg[loginascookie]" value="1" $checkloginascookie><label for="cfg[loginascookie]"><strong>$vbphrase[wmail_loginascookie]</strong></label><br />
+        $vbphrase[wmail_loginascookiedescr]
+      </fieldset>
+    </td>
+  </tr>
+</table>
+
+<!-- /WMail Server Settings -->
+
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td>&nbsp;</td>
+  </tr>
+  <tr>
+    <td class="thead">$vbphrase[wmail_generaloptions]</td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel">
+
+<!-- WMail General Settings -->
+
+<table cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="100" align="center">
+  <tr>
+    <td align="left" valign="top" nowrap="nowrap">
+      <fieldset class="fieldset"><legend>$vbphrase[wmail_settings_prefs]</legend>
+        $vbphrase[wmail_mailsperpage]:<br />
+        <input name="cfg[mailsperpage]" type="text" size="4" value="$wmailcfg[mailsperpage]" /><br /><br />
+        $vbphrase[wmail_sortorder]:<br />
+        <select name="cfg[sortorder]">
+   <if condition="$wmailcfg[sortorder]==false">
+    <option value="0" selected>$vbphrase[wmail_newestfirst]</option>
+   <else />
+    <option value="0">$vbphrase[wmail_newestfirst]</option>
+   </if>
+   <if condition="$wmailcfg[sortorder]==true">
+    <option value="1" selected>$vbphrase[wmail_newestlast]</option>
+   <else />
+    <option value="1">$vbphrase[wmail_newestlast]</option>
+   </if>
+      </select><br /><br />
+        $vbphrase[wmail_cutoffafter]:<br />
+        <input name="cfg[subjmaxchars]" type="text" size="4" value="$wmailcfg[subjmaxchars]" /><br /><br />
+        $vbphrase[wmail_chooseeditor]:<br />
+        <select name="cfg[editor]">
+   <if condition="$wmailcfg[editor]=='WYSIWYG'">
+    <option value="WYSIWYG" selected>$vbphrase[wmail_wysiwyg]</option>
+   <else />
+    <option value="WYSIWYG">$vbphrase[wmail_wysiwyg]</option>
+   </if>
+   <if condition="$wmailcfg[editor]=='SIMPLE'">
+    <option value="SIMPLE" selected>$vbphrase[wmail_simple]</option>
+   <else />
+    <option value="SIMPLE">$vbphrase[wmail_simple]</option>
+   </if>
+      </select><br /><br />
+      $vbphrase[wmail_rediraftersend]:<br />
+      <select name="cfg[rediraftersend]">
+   <if condition="$wmailcfg[rediraftersend]=='no'">
+    <option value="no" selected>$vbphrase[no]</option>
+   <else />
+    <option value="no">$vbphrase[no]</option>
+   </if>
+   <if condition="$wmailcfg[rediraftersend]=='yes'">
+    <option value="yes" selected>$vbphrase[yes]</option>
+   <else />
+    <option value="yes">$vbphrase[yes]</option>
+   </if>
+      </select><br /><br />
+      </fieldset>
+      <br />
+      <fieldset class="fieldset"><legend>$vbphrase[wmail_settings_sender]</legend>
+  $vbphrase[wmail_senderemail]:<br />
+      <input name="cfg[smtpfrom]" type="text" size="50" value="$wmailcfg[smtpfrom]" /><br />
+  <input type="checkbox" name="cfg[useforumemail]" id="cfg[useforumemail]" value="1" $checkuserfemail><label for="cfg[useforumemail]">$vbphrase[wmail_useforumemail]</label><br />
+	  <br />
+  $vbphrase[wmail_senderrealname]:<br />
+      <input name="cfg[realname]" type="text" size="50" value="$wmailcfg[realname]" /><br />
+      <input type="checkbox" name="cfg[useforumnick]" id="cfg[useforumnick]" value="1" $checkuserfnick><label for="cfg[useforumnick]">$vbphrase[wmail_useforumnick]</label><br />
+	  <br />
+  $vbphrase[wmail_sendersig]:<br />
+  <textarea name="cfg[signature]" cols="75" rows="7">$wmailcfg[signature]</textarea><br />
+  <input type="checkbox" name="cfg[useforumsig]" id="cfg[useforumsig]" value="1" $checkuserfsig><label for="cfg[useforumsig]">$vbphrase[wmail_useforumsig]</label><br />
+      <br />
+      </fieldset>
+    </td>
+  </tr>
+</table>
+
+<!-- /WMail General Settings -->
+
+      </div>
+    </td>
+  </tr>
+  <tr>
+    <td class="panelsurround" align="center">
+      <div class="panel">
+        <input name="btnsave" type="submit" id="btnsave" value="$vbphrase[wmail_savesettings]" class="button" />
+      </div>
+    </td>
+  </tr>
+</table>
+</form>
+<!-- /WMail Settings -->]]></template>
+		<template name="webmail_shell" templatetype="template" date="1147915219" username="Hellcat" version="3.5.4"><![CDATA[<!-- Webmail SHELL -->
+<if condition="$v_inc_match === false">
+<table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="88%" align="center">
+  <tr>
+    <td class="panelsurround" align="left">
+      <div class="panel" align="center"><strong>$vbphrase[wmail_versionmismatch]</strong></div>
+    </td>
+  </tr>
+</table>
+<br />
+</if>
+
+<table cellpadding="0" cellspacing="0" border="0" width="100%" align="center">
+  <tr valign="top"><td>
+
+<!-- Webmail Navpanel -->
+
+  <table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="88%" align="center">
+    <tr>
+      <td class="tcat" nowrap="nowrap">$vbphrase[wmail_wmailpanel]</td>
+    </tr>
+    <tr>
+      <td class="panelsurround" align="left">
+        <div class="panel">
+
+  <table class="tborder" cellpadding="$stylevar[cellpadding]" cellspacing="$stylevar[cellspacing]" border="0" width="100%">
+<!--    <tr>
+      <td class="tcat" nowrap="nowrap"><a href="wmail.php$session[sessionurl_q]">$vbphrase[wmail_wmailpanel]</a></td>
+    </tr> -->
+    <tr>
+      <td class="thead">$vbphrase[wmail_panelactions]</td>
+    </tr>
+    <tr>
+      <td class="$navclass[getmail]" nowrap="nowrap"><a class="smallfont" href="wmail.php?$session[sessionurl]do=getmail">$vbphrase[wmail_nav_getmail]</a></td>
+    </tr>
+    <tr>
+      <td class="$navclass[newmail]" nowrap="nowrap"><a class="smallfont" href="wmail.php?$session[sessionurl]do=newmail">$vbphrase[wmail_nav_newmail]</a></td>
+    </tr>
+    <tr>
+      <td class="thead">$vbphrase[wmail_paneloptions]</td>
+    </tr>
+    <tr>
+      <td class="$navclass[settings]" nowrap="nowrap"><a class="smallfont" href="wmail.php?$session[sessionurl]do=settings">$vbphrase[wmail_nav_settings]</a></td>
+    </tr>
+    <tr>
+      <td class="$navclass[adrbook]" nowrap="nowrap"><a class="smallfont" href="wmail.php?$session[sessionurl]do=adrbook">$vbphrase[wmail_adrbook]</a></td>
+    </tr>
+  </table>
+
+        </div>
+      </td>
+    </tr>
+  </table>
+
+
+<!-- /Webmail Navpanel -->
+
+  </td><td width="100%">
+
+<!-- Webmail main content -->
+
+$wmailcontent
+
+<!-- /Webmail main content -->
+
+  </td></tr>
+</table>
+
+<table cellpadding="0" cellspacing="0" border="0" width="100%" align="center">
+  <tr valign="top"><td align="center"><div class="smallfont"><br /><strong><em>$vbphrase[wmail_footer]</em></strong></div></td></tr>
+</table>
+
+<!-- /Webmail SHELL -->]]></template>
+		<template name="webmail_simpleeditor" templatetype="template" date="1147837915" username="Hellcat" version="3.5.4"><![CDATA[<textarea name="message" id="message" rows="10" cols="60" style="width:$stylevar[messagewidth]; height:250px" dir="$stylevar[textdirection]">$mbody</textarea>]]></template>
+		<template name="webmail_vbnav_navbarlink" templatetype="template" date="1147428222" username="Hellcat" version="3.5.4"><![CDATA[<td class="vbmenu_control"><a href="wmail.php$session[sessionurl_q]">$vbphrase[wmail_webmail]</a></td>]]></template>
+		<template name="webmail_vbnav_quicklink" templatetype="template" date="1147426923" username="Hellcat" version="3.5.4"><![CDATA[<tr><td class="vbmenu_option"><a href="wmail.php$session[sessionurl_q]">$vbphrase[wmail_webmail]</a></td></tr>]]></template>
+		<template name="webmail_vbnav_usercp" templatetype="template" date="1147652590" username="Hellcat" version="3.5.4"><![CDATA[<tr>
+  <td class="thead">$vbphrase[wmail_webmail]</td>
+</tr>
+<tr>
+  <td class="alt2" nowrap="nowrap"><a class="smallfont" href="wmail.php?$session[sessionurl]">$vbphrase[wmail_accesswebmail]</a></td>
+</tr>
+<tr>
+  <td class="alt2" nowrap="nowrap"><a class="smallfont" href="wmail.php?$session[sessionurl]do=settings">$vbphrase[wmail_settings]</a></td>
+</tr>]]></template>
+	</templates>
+	<plugins>
+		<plugin active="1">
+			<title>Cache Additional Tempates</title>
+			<hookname>cache_templates</hookname>
+			<phpcode><![CDATA[$globaltemplates = array_merge($globaltemplates, array("webmail_vbnav_quicklink", "webmail_vbnav_navbarlink", "webmail_vbnav_usercp"));]]></phpcode>
+		</plugin>
+		<plugin active="1">
+			<title>Template Manipulation (Add WMail Links)</title>
+			<hookname>global_start</hookname>
+			<phpcode><![CDATA[if ((($permissions['wmailpermissions'] & $vbulletin->bf_ugp['wmailpermissions']['canusewebmail']) OR ( $vbulletin->options["wmail_addlink_onoff"] == "2" )) AND ( $vbulletin->options["wmail_addlink_onoff"] != "0" ))
+{
+  // only add the links when the user actually can use the webmailer
+
+if ( $vbulletin->options["wmail_addlink_quicklink"] == "1" )
+{
+  $t = str_replace( '<tr><td class=\"thead\">$vbphrase[miscellaneous]</td></tr>',
+                    '<tr><td class=\"thead\">$vbphrase[miscellaneous]</td></tr>\n' .
+                     $vbulletin->templatecache["webmail_vbnav_quicklink"], $vbulletin->templatecache["navbar"] );
+  $vbulletin->templatecache["navbar"] = $t;
+}
+
+if ( $vbulletin->options["wmail_addlink_navbar"] == "1" )
+{
+  $t = str_replace( '<td class=\"vbmenu_control\"><a href=\"faq.php" . $GLOBALS[' . "'" . 'vbulletin' . "'" . ']->session->vars[' . "'" . 'sessionurl_q' . "'" . '] . "\" accesskey=\"5\">$vbphrase[faq]</a></td>',
+                    '<td class=\"vbmenu_control\"><a href=\"faq.php" . $GLOBALS[' . "'" . 'vbulletin' . "'" . ']->session->vars[' . "'" . 'sessionurl_q' . "'" . '] . "\" accesskey=\"5\">$vbphrase[faq]</a></td>\n' .
+                     $vbulletin->templatecache["webmail_vbnav_navbarlink"], $vbulletin->templatecache["navbar"] );
+  $vbulletin->templatecache["navbar"] = $t;
+}
+
+if ( ( strlen( $vbulletin->templatecache["USERCP_SHELL"] ) > 1 ) AND ( $vbulletin->options["wmail_addlink_usercp"] == "1" ) )
+{
+  $t = str_replace( '".(($show[' . "'" . 'pmstats' . "'" . ']) ? ("',
+                     $vbulletin->templatecache["webmail_vbnav_usercp"] . "\n" . 
+                    '".(($show[' . "'" . 'pmstats' . "'" . ']) ? ("', $vbulletin->templatecache["USERCP_SHELL"] );
+  $vbulletin->templatecache["USERCP_SHELL"] = $t;
+}
+
+}]]></phpcode>
+		</plugin>
+		<plugin active="1">
+			<title>WMail - WOL Location (Part 1)</title>
+			<hookname>online_location_process</hookname>
+			<phpcode><![CDATA[if ($filename == 'wmail.php')
+{
+  $userinfo['activity'] = 'wmail';
+}]]></phpcode>
+		</plugin>
+		<plugin active="1">
+			<title>WMail - WOL Location (Part 2)</title>
+			<hookname>online_location_unknown</hookname>
+			<phpcode><![CDATA[if ($userinfo['activity'] == 'wmail')
+{
+  $userinfo['action'] = $vbphrase["wmail_wol_inwmail"];
+  $userinfo['where']  = '<a href="wmail.php?' . $vbulletin->session->vars['sessionurl'] . '">' . $vbphrase["wmail_wol_wmail"] . '</a>';
+  $handled = true;
+}]]></phpcode>
+		</plugin>
+		<plugin active="1">
+			<title>WMail Template Group</title>
+			<hookname>template_groups</hookname>
+			<phpcode><![CDATA[$only = array_merge($only, array('webmail' => 'Webmail'));]]></phpcode>
+		</plugin>
+	</plugins>
+	<phrases>
+		<phrasetype name="GLOBAL" fieldname="global">
+			<phrase name="wmail_accesswebmail"><![CDATA[Access Webmail]]></phrase>
+			<phrase name="wmail_settings"><![CDATA[Webmail Settings]]></phrase>
+			<phrase name="wmail_webmail"><![CDATA[Webmail]]></phrase>
+			<phrase name="wmail_wol_inwmail"><![CDATA[Using Webmail Client]]></phrase>
+			<phrase name="wmail_wol_wmail"><![CDATA[Webmail Client]]></phrase>
+		</phrasetype>
+		<phrasetype name="Control Panel Global" fieldname="cpglobal">
+			<phrase name="wmail_admin_header_global"><![CDATA[WMail Repair Tool]]></phrase>
+			<phrase name="wmail_admin_header_repair"><![CDATA[WMail - REPAIR]]></phrase>
+			<phrase name="wmail_admin_repair1done"><![CDATA[Table setup complete.<br />Now heading for the bitfields....<br /><br />Please wait....]]></phrase>
+			<phrase name="wmail_admin_repairdescr"><![CDATA[<br /><br />This option allows to repair your installation of WMail in case something went wrong<br /><br />All missing tables or table manipulations will be re-created, no existing data will be altered!<br /><br />Use this when you get SQL errors while running WMail.<br /><br /><br />]]></phrase>
+			<phrase name="wmail_cp_canusewmail"><![CDATA[Can use the WMail Webmail Client]]></phrase>
+			<phrase name="wmail_cp_links_all"><![CDATA[Add links for everyone]]></phrase>
+			<phrase name="wmail_cp_links_none"><![CDATA[Add no links at all]]></phrase>
+			<phrase name="wmail_cp_links_permission"><![CDATA[Add only for allowed users]]></phrase>
+			<phrase name="wmail_cpnav_global"><![CDATA[Global Settings]]></phrase>
+			<phrase name="wmail_cpnav_options"><![CDATA[WMail Options]]></phrase>
+			<phrase name="wmail_cpnav_repair"><![CDATA[Repair]]></phrase>
+			<phrase name="wmail_cpnav_title"><![CDATA[WMail Options]]></phrase>
+			<phrase name="wmail_permissions"><![CDATA[WMail Permissions]]></phrase>
+		</phrasetype>
+		<phrasetype name="WMail Phrases" fieldname="wmail">
+			<phrase name="wmail_addnewatt"><![CDATA[Add new attachment]]></phrase>
+			<phrase name="wmail_addressbook"><![CDATA[The Black Book]]></phrase>
+			<phrase name="wmail_adrbook"><![CDATA[Address Book]]></phrase>
+			<phrase name="wmail_adrbook_adrbookempty"><![CDATA[Your Addressbook is empty!]]></phrase>
+			<phrase name="wmail_adrbook_contactlist"><![CDATA[Your Contacts]]></phrase>
+			<phrase name="wmail_adrbook_copyto"><![CDATA[Use selected contact as]]></phrase>
+			<phrase name="wmail_adrbook_details"><![CDATA[Contact Details]]></phrase>
+			<phrase name="wmail_adrbook_email"><![CDATA[E-Mail Address]]></phrase>
+			<phrase name="wmail_adrbook_name"><![CDATA[Nick or Realname]]></phrase>
+			<phrase name="wmail_adrbook_quicknew"><![CDATA[New mail to selected entry]]></phrase>
+			<phrase name="wmail_adrbook_save"><![CDATA[Update existing / Add new entry]]></phrase>
+			<phrase name="wmail_adrbook_welcome"><![CDATA[This is your addressbook.<br />Add, edit and delete possible reciepients here.]]></phrase>
+			<phrase name="wmail_attachments"><![CDATA[Attachments]]></phrase>
+			<phrase name="wmail_attimg"><![CDATA[Attachment]]></phrase>
+			<phrase name="wmail_authtype"><![CDATA[Auth Type]]></phrase>
+			<phrase name="wmail_bcc"><![CDATA[BCC]]></phrase>
+			<phrase name="wmail_cc"><![CDATA[CC]]></phrase>
+			<phrase name="wmail_chooseeditor"><![CDATA[Choose editor to use for writing new mail]]></phrase>
+			<phrase name="wmail_clickforinbox"><![CDATA[Click <a href="wmail.php?do=getmail">here</a> for your complete<br />inbox content.]]></phrase>
+			<phrase name="wmail_composemail"><![CDATA[Write New Mail]]></phrase>
+			<phrase name="wmail_cutoffafter"><![CDATA[Maximum length of subject lines in inbox list (in characters)]]></phrase>
+			<phrase name="wmail_date"><![CDATA[Date]]></phrase>
+			<phrase name="wmail_delete"><![CDATA[Delete]]></phrase>
+			<phrase name="wmail_deleteselected"><![CDATA[Delete Selected]]></phrase>
+			<phrase name="wmail_error"><![CDATA[ERROR]]></phrase>
+			<phrase name="wmail_error_attdl"><![CDATA[An error accoured while trying to download the attachment!<br /><br />
+This may accour when the connection to your POP3 server fails, or you specified an non-existant attachment ID.]]></phrase>
+			<phrase name="wmail_error_inboxempty"><![CDATA[Your inbox is empty]]></phrase>
+			<phrase name="wmail_error_missingto"><![CDATA[The &quot;TO&quot; field can't be left empty!<br />Please fill in a recipient and try again.]]></phrase>
+			<phrase name="wmail_error_pop3connect"><![CDATA[An error accoured while connecting to your POP3 server!]]></phrase>
+			<phrase name="wmail_error_smtp"><![CDATA[There has been an error while talking to your SMTP server!<br />Sessionlog follows:]]></phrase>
+			<phrase name="wmail_footer"><![CDATA[powered by WMail - POP3/SMTP Client for vBulletin<br />
+(c)2006 by HELLCAT]]></phrase>
+			<phrase name="wmail_forward"><![CDATA[Forward]]></phrase>
+			<phrase name="wmail_from"><![CDATA[From]]></phrase>
+			<phrase name="wmail_generaloptions"><![CDATA[General Options]]></phrase>
+			<phrase name="wmail_homepage_welcome"><![CDATA[<em>Welcome {1}.</em><br /><br />You have a total of <strong>{2}</strong> mails in your inbox,<br />that's <strong>{3}</strong> new mails since your last check.]]></phrase>
+			<phrase name="wmail_host"><![CDATA[Host]]></phrase>
+			<phrase name="wmail_inbox"><![CDATA[Inbox]]></phrase>
+			<phrase name="wmail_lastestmail"><![CDATA[Lastest Mail]]></phrase>
+			<phrase name="wmail_loginascookie"><![CDATA[Save login details in cookie]]></phrase>
+			<phrase name="wmail_loginascookiedescr"><![CDATA[Usually the login detail you enter here are saved into the forum's database,<br />
+so you never need to enter them again.<br />
+However, if you do not want this, you can choose to save the login details<br />
+in a cookie on your local computer.<br />
+Usually you do not have to re-enter this information unless the cookie gets deleted<br />
+or you're using a different computer.]]></phrase>
+			<phrase name="wmail_mailbox"><![CDATA[Mailbox]]></phrase>
+			<phrase name="wmail_mailsent"><![CDATA[<em>Your mail to</em><br /><strong>{1}</strong><br /><em>has been sent.</em>]]></phrase>
+			<phrase name="wmail_mailsperpage"><![CDATA[Mails per page]]></phrase>
+			<phrase name="wmail_markallread"><![CDATA[Mark all mails read]]></phrase>
+			<phrase name="wmail_markselectedread"><![CDATA[Mark selected read]]></phrase>
+			<phrase name="wmail_markunread"><![CDATA[Mark selected unread]]></phrase>
+			<phrase name="wmail_nav_getmail"><![CDATA[Get Mails]]></phrase>
+			<phrase name="wmail_nav_newmail"><![CDATA[New Mail]]></phrase>
+			<phrase name="wmail_nav_settings"><![CDATA[Settings]]></phrase>
+			<phrase name="wmail_navbit_webmail"><![CDATA[Webmail Access]]></phrase>
+			<phrase name="wmail_newestfirst"><![CDATA[Newest First]]></phrase>
+			<phrase name="wmail_newestlast"><![CDATA[Newest Last]]></phrase>
+			<phrase name="wmail_notice"><![CDATA[Notice]]></phrase>
+			<phrase name="wmail_panelactions"><![CDATA[Actions]]></phrase>
+			<phrase name="wmail_paneloptions"><![CDATA[Options]]></phrase>
+			<phrase name="wmail_password"><![CDATA[Password]]></phrase>
+			<phrase name="wmail_port"><![CDATA[Port]]></phrase>
+			<phrase name="wmail_quotingmsg"><![CDATA[Quoting Message]]></phrase>
+			<phrase name="wmail_readmail"><![CDATA[Read Mail]]></phrase>
+			<phrase name="wmail_recentthings"><![CDATA[Recent Stuff]]></phrase>
+			<phrase name="wmail_rediraftersend"><![CDATA[Automatically redirect back to "Write New Mail" page after sending]]></phrase>
+			<phrase name="wmail_reply"><![CDATA[Reply]]></phrase>
+			<phrase name="wmail_savesettings"><![CDATA[Save Settings]]></phrase>
+			<phrase name="wmail_selectall"><![CDATA[(De)Select All]]></phrase>
+			<phrase name="wmail_send"><![CDATA[Send]]></phrase>
+			<phrase name="wmail_senderemail"><![CDATA[Sender E-Mail (your outgoing address)]]></phrase>
+			<phrase name="wmail_senderrealname"><![CDATA[Sender Realname (FROM field in outgoing mail)]]></phrase>
+			<phrase name="wmail_sendersig"><![CDATA[Signature to automatically append to all new mails]]></phrase>
+			<phrase name="wmail_serveroptions"><![CDATA[Server Settings]]></phrase>
+			<phrase name="wmail_settings_pop3"><![CDATA[POP3 (Inbound)]]></phrase>
+			<phrase name="wmail_settings_prefs"><![CDATA[User Preferences]]></phrase>
+			<phrase name="wmail_settings_sender"><![CDATA[Sender Settings]]></phrase>
+			<phrase name="wmail_settings_smtp"><![CDATA[SMTP (Outbound)]]></phrase>
+			<phrase name="wmail_simple"><![CDATA[Simple]]></phrase>
+			<phrase name="wmail_size"><![CDATA[Size]]></phrase>
+			<phrase name="wmail_smtpauth_login"><![CDATA[LOGIN]]></phrase>
+			<phrase name="wmail_smtpauth_none"><![CDATA[NONE]]></phrase>
+			<phrase name="wmail_smtpauth_plain"><![CDATA[PLAIN]]></phrase>
+			<phrase name="wmail_sortorder"><![CDATA[Sort Order]]></phrase>
+			<phrase name="wmail_subject"><![CDATA[Subject]]></phrase>
+			<phrase name="wmail_timeout"><![CDATA[Timeout (in Seconds)]]></phrase>
+			<phrase name="wmail_to"><![CDATA[To]]></phrase>
+			<phrase name="wmail_upload"><![CDATA[Upload]]></phrase>
+			<phrase name="wmail_useforumemail"><![CDATA[Use forum E-Mail address]]></phrase>
+			<phrase name="wmail_useforumnick"><![CDATA[Use forum username]]></phrase>
+			<phrase name="wmail_useforumsig"><![CDATA[Use forum signature]]></phrase>
+			<phrase name="wmail_username"><![CDATA[Username]]></phrase>
+			<phrase name="wmail_versionmismatch"><![CDATA[VERSION MISMATCH DETECTED!<br />There is a version inconsistancy in the supplemental files,<br />please inform system admin!]]></phrase>
+			<phrase name="wmail_wmailpanel"><![CDATA[Webmail Controls]]></phrase>
+			<phrase name="wmail_wmailsettings"><![CDATA[Webmail Configuration]]></phrase>
+			<phrase name="wmail_wmailversion"><![CDATA[WMail Version]]></phrase>
+			<phrase name="wmail_wysiwyg"><![CDATA[WYSIWYG]]></phrase>
+		</phrasetype>
+		<phrasetype name="WMail AdminCP Phrases" fieldname="wmailadmin">
+			<phrase name="wmail_admin_descr_global"><![CDATA[Here, you can enter values to override certain settings of the user configuration.<br />Leave a field empty, or clear it, to not to override this setting.<br />The user is unable to apply own values to overridden options, always the ones entered here will be used!]]></phrase>
+			<phrase name="wmail_admin_header_global"><![CDATA[WMail Global Settings]]></phrase>
+			<phrase name="wmail_admin_pop3host"><![CDATA[POP3 Host]]></phrase>
+			<phrase name="wmail_admin_settingssaved"><![CDATA[Settings saved....]]></phrase>
+			<phrase name="wmail_admin_smtpauth"><![CDATA[SMTP Auth Type]]></phrase>
+			<phrase name="wmail_admin_smtphost"><![CDATA[SMTP Host]]></phrase>
+			<phrase name="wmail_admin_useforumemail"><![CDATA[Use Forum E-Mail]]></phrase>
+			<phrase name="wmail_admin_useforumnick"><![CDATA[Use Forum Username]]></phrase>
+			<phrase name="wmail_admin_useforumsig"><![CDATA[Use Forum Signature]]></phrase>
+		</phrasetype>
+		<phrasetype name="vBulletin Settings" fieldname="vbsettings">
+			<phrase name="setting_wmail_addlink_navbar_desc"><![CDATA[This option allows you to enable/disable the automatic addition of a "Webmail" link to the navbar (behind "Faq").]]></phrase>
+			<phrase name="setting_wmail_addlink_navbar_title"><![CDATA[Add "Webmail" to Navbar?]]></phrase>
+			<phrase name="setting_wmail_addlink_onoff_desc"><![CDATA[Here you can choose for what users the automatically added links should be added.<br />
+Only for users having permission to use the webmailer, for all users or completely disable the automatic insertion of links.<br /><br />
+If you choose one of the enabled options you can turn each link on and off separately below.]]></phrase>
+			<phrase name="setting_wmail_addlink_onoff_title"><![CDATA[Automatically add links to the webmailer?]]></phrase>
+			<phrase name="setting_wmail_addlink_quicklink_desc"><![CDATA[This option allows you to enable/disable the automatic addition of a "Webmail" link to the Quicklinks list.]]></phrase>
+			<phrase name="setting_wmail_addlink_quicklink_title"><![CDATA[Add "Webmail" link to Quicklinks?]]></phrase>
+			<phrase name="setting_wmail_addlink_usercp_desc"><![CDATA[This option allows you to enable/disable the automatic addition of a "Webmail" link in the UserCP (above PMs).]]></phrase>
+			<phrase name="setting_wmail_addlink_usercp_title"><![CDATA[Add "Webmail" link to the UserCP?]]></phrase>
+			<phrase name="settinggroup_wmail_vboptions"><![CDATA[WMail Options]]></phrase>
+		</phrasetype>
+	</phrases>
+	<options>
+		<settinggroup name="wmail_vboptions" displayorder="570">
+			<setting varname="wmail_addlink_onoff" displayorder="5">
+				<datatype>free</datatype>
+				<optioncode><![CDATA[<div class=\"smallfont\"><label for=\"linkenable0\"><input type=\"radio\" name=\"setting[$settingid]\" id=\"linkenable0\" value=\"0\" tabindex=\"1\"" . ($setting['value'] == 0 ? ' checked="checked"' : '') . " />$vbphrase[wmail_cp_links_none]</label></div>
+<div class=\"smallfont\"><label for=\"linkenable1\"><input type=\"radio\" name=\"setting[$settingid]\" id=\"linkenable1\" value=\"1\" tabindex=\"1\"" . ($setting['value'] == 1 ? ' checked="checked"' : '') . " />$vbphrase[wmail_cp_links_permission]</label></div>
+<div class=\"smallfont\"><label for=\"linkenable2\"><input type=\"radio\" name=\"setting[$settingid]\" id=\"linkenable2\" value=\"2\" tabindex=\"1\"" . ($setting['value'] == 2 ? ' checked="checked"' : '') . " />$vbphrase[wmail_cp_links_all]</label></div>]]></optioncode>
+				<defaultvalue>2</defaultvalue>
+			</setting>
+			<setting varname="wmail_addlink_quicklink" displayorder="10">
+				<datatype>free</datatype>
+				<optioncode>yesno</optioncode>
+				<defaultvalue>1</defaultvalue>
+			</setting>
+			<setting varname="wmail_addlink_navbar" displayorder="20">
+				<datatype>free</datatype>
+				<optioncode>yesno</optioncode>
+				<defaultvalue>1</defaultvalue>
+			</setting>
+			<setting varname="wmail_addlink_usercp" displayorder="30">
+				<datatype>free</datatype>
+				<optioncode>yesno</optioncode>
+				<defaultvalue>1</defaultvalue>
+			</setting>
+		</settinggroup>
+	</options>
+</product>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<bitfields product="hc_vbwebmail">
+	<bitfielddefs>
+		<group name="ugp">
+			<group name="wmailpermissions">
+				<bitfield name="canusewebmail" group="wmail_permissions" phrase="wmail_cp_canusewmail" install="1,2,3,4,5,6,7">1</bitfield>
+			</group>
+		</group>
+	</bitfielddefs>
+</bitfields>

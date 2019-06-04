@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<hooks>
+
+	<hooktype type="wmail_main">
+		<hook>wmail_global_start</hook>
+		<hook>wmail_getmail_start</hook>
+		<hook>wmail_getmail_complete</hook>
+		<hook>wmail_readmail_start</hook>
+		<hook>wmail_readmail_attachments</hook>
+		<hook>wmail_readmail_complete</hook>
+		<hook>wmail_attachmentdownload</hook>
+		<hook>wmail_newmail_start</hook>
+		<hook>wmail_newmail_attachment</hook>
+		<hook>wmail_newmail_sendmail</hook>
+		<hook>wmail_newmail_complete</hook>
+		<hook>wmail_settings</hook>
+		<hook>wmail_adrbook</hook>
+		<hook>wmail_homepage</hook>
+		<hook>wmail_global_complete</hook>
+	</hooktype>
+
+</hooks>
