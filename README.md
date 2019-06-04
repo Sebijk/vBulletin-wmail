@@ -1,4 +1,4 @@
-# vBulletin-wmail
+# WMail - a POP3/SMTP Webmailer for vBulletin
 WMail adds POP3/SMTP access to vBulletin. The original author released this under the GPL. Its for vBulletin until 3.8. I only upload this for archive reasons.
 
 
